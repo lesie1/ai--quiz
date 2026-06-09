@@ -348,7 +348,7 @@
       <details class="tools">
         <summary>搜索、跳题和 AI 设置</summary>
         <div class="tool-body">
-          <select id="questionSelect"></select>
+          <input id="questionSelect" type="number" min="1" inputmode="numeric" placeholder="输入题号，回车或点完成跳转">
           <input id="searchBox" type="search" placeholder="搜索题干或选项">
           <div class="tool-grid">
             <select id="aiProvider">
@@ -481,10 +481,14 @@ ${optionText}
       return list;
     }
 
-    function setMode(nextMode) {
-      mode = nextMode;
+    function updateModeButtons() {
       document.querySelectorAll('.chip').forEach(btn => btn.classList.remove('active'));
       document.getElementById({order:'modeOrder', random:'modeRandom', wrong:'modeWrong', favorite:'modeFavorite', unseen:'modeUnseen'}[mode]).classList.add('active');
+    }
+
+    function setMode(nextMode) {
+      mode = nextMode;
+      updateModeButtons();
       index = 0;
       revealed = false;
       explained = false;
@@ -603,7 +607,33 @@ ${optionText}
     }
 
     function rebuildSelect() {
-      els.select.innerHTML = questions.map((q, i) => `<option value="${i}">第 ${q.id} 题</option>`).join('');
+      els.select.min = '1';
+      els.select.max = String(questions.length);
+      els.select.placeholder = `输入题号 1-${questions.length}，回车或点完成跳转`;
+    }
+
+    function jumpToQuestion() {
+      const raw = els.select.value.trim();
+      if (!raw) return;
+      const num = Number(raw);
+      if (!Number.isInteger(num)) {
+        alert('请输入整数题号');
+        return;
+      }
+      const targetIndex = questions.findIndex(q => q.id === num);
+      if (targetIndex < 0) {
+        alert(`没有第 ${num} 题，请输入 1-${questions.length} 之间的题号`);
+        els.select.value = filtered[index]?.id || '';
+        return;
+      }
+      mode = 'order';
+      updateModeButtons();
+      els.search.value = '';
+      index = targetIndex;
+      revealed = false;
+      explained = false;
+      aiMessage = '';
+      render();
     }
 
     function render() {
@@ -622,7 +652,7 @@ ${optionText}
       const answers = q.answers || [q.answer];
       const savedExplain = store.ai.explanations[String(q.id)] || '';
       const explainText = savedExplain || (aiLoading ? 'AI 正在解析这道题...' : (aiMessage || '还没有生成解析。可以联网生成，也可以复制提示词到 ChatGPT 或 Gemini。'));
-      els.select.value = Math.max(0, questions.findIndex(item => item.id === q.id));
+      els.select.value = q.id;
       els.positionText.textContent = `${index + 1} / ${filtered.length}`;
       els.typeText.textContent = q.type === 'multiple' ? '多选题' : '单选题';
       document.getElementById('showBtn').textContent = q.type === 'multiple' ? '确认/答案' : '看答案';
@@ -712,13 +742,13 @@ ${escapeHtml(explainText)}
       save();
       render();
     });
-    els.select.addEventListener('change', () => {
-      const selected = questions[Number(els.select.value)];
-      mode = 'order';
-      index = questions.findIndex(q => q.id === selected.id);
-      revealed = false;
-      explained = false;
-      setMode('order');
+    els.select.addEventListener('change', jumpToQuestion);
+    els.select.addEventListener('keydown', event => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        jumpToQuestion();
+        els.select.blur();
+      }
     });
     els.search.addEventListener('input', () => { index = 0; revealed = false; explained = false; aiMessage = ''; render(); });
     els.aiProvider.addEventListener('change', () => {
